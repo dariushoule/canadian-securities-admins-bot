@@ -8,7 +8,7 @@
     "number"
   ],
   "company_fields": {
-    "name": "company"
+    "name": "firm"
   },
   "files": [
     "scraper.py"

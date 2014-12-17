@@ -77,19 +77,40 @@ def get_result_table(response):
     return BeautifulSoup(match.group(0))
 
 
-def process_page(url, post_body, page_number):
+def generate_body(page_number):
+    global last_view_state, last_validation, last_view_generator, post_body_continue
+    body = post_body_seed if page_number == 1 else post_body_continue
+
+    return body.replace("[PAGE_NUMBER]", str(page_number))     \
+            .replace("[VIEW_STATE]", last_view_state)               \
+            .replace("[VALIDATION]", last_validation)               \
+            .replace("[GENERATOR]", last_view_generator)
+
+
+def generate_body_detail(control_id):
+    global last_view_state, last_validation, last_view_generator, post_body_detail
+
+    return post_body_detail.replace("[CONTROL_ID]", control_id)     \
+            .replace("[VIEW_STATE]", last_view_state)        \
+            .replace("[VALIDATION]", last_validation)        \
+            .replace("[GENERATOR]", last_view_generator)
+
+
+def process_details(url, control_href):
+    control_id = urllib.quote(control_href.replace("javascript:__doPostBack('", '').replace("','')", ''))
+    req = retrieve(url, "POST", generate_body_detail(control_id))
+    print "wat:" + req.text
+    return {"test": "omatic"}
+
+
+def process_page(url, page_number):
     global last_view_state
     global last_validation
     global last_view_generator
 
     turbotlib.log("Requesting rows %d - %d" % ((page_number * 100 - 100), (page_number * 100)))
 
-    body = post_body.replace("[PAGE_NUMBER]", str(page_number)) \
-        .replace("[VIEW_STATE]", last_view_state)               \
-        .replace("[VALIDATION]", last_validation)               \
-        .replace("[GENERATOR]", last_view_generator)
-
-    req = retrieve(url, "POST", body)
+    req = retrieve(url, "POST", generate_body(page_number))
     last_view_state     = urllib.quote(get_asp_resp_var(req.text, "__VIEWSTATE"))
     last_validation     = urllib.quote(get_asp_resp_var(req.text, "__EVENTVALIDATION"))
     last_view_generator = urllib.quote(get_asp_resp_var(req.text, "__VIEWSTATEGENERATOR"))
@@ -99,12 +120,17 @@ def process_page(url, post_body, page_number):
         tds = tr.find_all('td')
 
         if len(tds) == 2:
-            print {
+            a = tds[0].find('a')
+            details = process_details(url, a['href'])
+
+            print json.dumps((details.items() + {
                 'firm': tds[0].text,
                 'jurisdiction': tds[1].text,
                 'sample_date': datetime.datetime.now().isoformat(),
                 'source_url': url_start
-            }
+            }.items()))
+
+            break
 
     print req.text
     return req.text
@@ -115,7 +141,7 @@ def process_pages(url):
     page_number = 1
 
     while record_count is None or (page_number * 100) < record_count:
-        response_text = process_page(url, post_body_seed if (page_number == 1) else post_body_continue, page_number)
+        response_text = process_page(url, page_number)
 
         # Ensure the number of records haven't changed during run
         check_count = get_record_count(response_text)
