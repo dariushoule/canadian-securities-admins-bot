@@ -6,8 +6,8 @@ import turbotlib
 import requests
 import time
 import re
-import BeautifulSoup
-
+import urllib
+from bs4 import BeautifulSoup
 
 # Global request session
 session = requests.Session()
@@ -19,9 +19,13 @@ with open("post_body_seed.raw", "r") as pb_seed:
 with open("post_body_continue.raw", "r") as pb_continue:
     post_body_continue = pb_continue.read()
 
-    with open("post_body_detail.raw", "r") as pb_continue:
-    post_body_continue = pb_continue.read()
+with open("post_body_detail.raw", "r") as pb_continue:
+    post_body_detail = pb_continue.read()
 
+last_view_state = ""
+last_view_generator = ""
+last_validation = ""
+url_start = "http://www.securities-administrators.ca/nrs/nrsearch.aspx?id=850"
 
 ##
 # retrieve_post will attempt to return a completed POST request, retrying on failure.
@@ -50,7 +54,8 @@ def retrieve(url, method, data, attempt=1):
         connection_exception = True
 
     if (connection_exception or response.status_code != requests.codes.ok) and attempt <= 5:
-        turbotlib.log("There was a connection failure reaching the host, waiting and retrying...")
+        turbotlib.log("There was a failure reaching or understanding the host, waiting and retrying...")
+        turbotlib.log("Failure: " + response.text)
         time.sleep(attempt * 5)
         return retrieve(url, method, data, attempt + 1)
 
@@ -58,35 +63,51 @@ def retrieve(url, method, data, attempt=1):
 
 
 def get_record_count(response):
-    match = re.match(r'There are (\d+) records found', response)
-    return int(match.group(0))
+    match = re.search(r'There are (\d+) records found', response,  re.DOTALL)
+    return match.group(0)
+
+
+def get_asp_resp_var(response, var):
+    match = re.search(r'\|' + var + '\|(.*?)\|', response, re.DOTALL)
+    return match.group(1)
 
 
 def get_result_table(response):
-    # A Regex for HTML is evil but we have to do this to separate out a
-    # huge amount of malformatted ASP.net metadata garbage
-    match = re.match(r'(<table class="gridview_style".*?</table>)', response)
+    match = re.search(r'(<table class="gridview_style".*?</table>)', response, re.DOTALL)
     return BeautifulSoup(match.group(0))
 
 
 def process_page(url, post_body, page_number):
+    global last_view_state
+    global last_validation
+    global last_view_generator
+
     turbotlib.log("Requesting rows %d - %d" % ((page_number * 100 - 100), (page_number * 100)))
-    req = retrieve(url, "POST", post_body.replace("[PAGE_NUMBER]", str(page_number)))
-    table = get_result_table(req)
+
+    body = post_body.replace("[PAGE_NUMBER]", str(page_number)) \
+        .replace("[VIEW_STATE]", last_view_state)               \
+        .replace("[VALIDATION]", last_validation)               \
+        .replace("[GENERATOR]", last_view_generator)
+
+    req = retrieve(url, "POST", body)
+    last_view_state     = urllib.quote(get_asp_resp_var(req.text, "__VIEWSTATE"))
+    last_validation     = urllib.quote(get_asp_resp_var(req.text, "__EVENTVALIDATION"))
+    last_view_generator = urllib.quote(get_asp_resp_var(req.text, "__VIEWSTATEGENERATOR"))
+    table = get_result_table(req.text)
 
     for tr in table.find_all('tr'):
         tds = tr.find_all('td')
 
-        if(len(tds) == 2):
+        if len(tds) == 2:
             print {
                 'firm': tds[0].text,
                 'jurisdiction': tds[1].text,
-                'sample_date': sample_date,   # mandatory field
-                'source_url': source_url
+                'sample_date': datetime.datetime.now().isoformat(),
+                'source_url': url_start
             }
 
-
-    return tr_child
+    print req.text
+    return req.text
 
 
 def process_pages(url):
@@ -94,10 +115,10 @@ def process_pages(url):
     page_number = 1
 
     while record_count is None or (page_number * 100) < record_count:
-        response = process_page(url, post_body_seed if (page_number == 1) else post_body_continue, page_number)
+        response_text = process_page(url, post_body_seed if (page_number == 1) else post_body_continue, page_number)
 
         # Ensure the number of records haven't changed during run
-        check_count = get_record_count(response)
+        check_count = get_record_count(response_text)
         if record_count is not None and record_count != check_count:
             raise Exception("The data set changed during a load, we need a re-run.")
         else:
@@ -106,7 +127,7 @@ def process_pages(url):
         if not record_count > 0:
             raise Exception("The data set is empty.")
 
-        if page_number > 2:
+        if page_number > 3:
             break
 
         page_number += 1
@@ -115,7 +136,7 @@ def process_pages(url):
 
 
 turbotlib.log("Starting run...")
-process_pages("http://www.securities-administrators.ca/nrs/nrsearch.aspx?id=850")
+process_pages(url_start)
 
 #--
 #for n in range(0, 20):
