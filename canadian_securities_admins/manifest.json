@@ -1,23 +1,24 @@
 {
   "bot_id": "canadian_securities_admins",
-  "title": "My simple bot",
-  "description": "This is a simple bot",
+  "title": "Canadian Securities Administrators Scraper",
+  "description": "Scrapes national registration data",
   "language": "python",
   "data_type": "primary data",
   "identifying_fields": [
-    "number"
+    "firm"
   ],
   "company_fields": {
-    "name": "firm"
+    "name": "firm",
+    "name": "jurisdiction"
   },
   "files": [
     "scraper.py"
   ],
   "frequency": "monthly",
   "publisher": {
-    "name": "Publisher of the data",
-    "url": "Publisher's website",
-    "terms": "Copyright terms (e.g. Open Government License, n/a, etc)",
-    "terms_url": "A place where these terms can be checked or verified"
+    "name": "Canadian Securities Administrators",
+    "url": "http://www.securities-administrators.ca/",
+    "terms": "",
+    "terms_url": "http://www.securities-administrators.ca/legal.aspx"
   }
 }

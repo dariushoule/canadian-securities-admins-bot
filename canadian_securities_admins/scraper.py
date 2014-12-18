@@ -9,8 +9,10 @@ import re
 import urllib
 from bs4 import BeautifulSoup
 
+
 # Global request session
 session = requests.Session()
+
 
 # Global post data page/detail requests
 with open("post_body_seed.raw", "r") as pb_seed:
@@ -22,11 +24,13 @@ with open("post_body_continue.raw", "r") as pb_continue:
 with open("post_body_detail.raw", "r") as pb_detail:
     post_body_detail = pb_detail.read()
 
+
 # Global application state
 last_view_state = ""
 last_view_generator = ""
 last_validation = ""
 url_start = "http://www.securities-administrators.ca/nrs/nrsearch.aspx?id=850"
+
 
 ##
 # retrieve will attempt to return a completed request, retrying on failure.
