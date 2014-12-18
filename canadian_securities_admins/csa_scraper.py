@@ -19,8 +19,8 @@ with open("post_body_seed.raw", "r") as pb_seed:
 with open("post_body_continue.raw", "r") as pb_continue:
     post_body_continue = pb_continue.read()
 
-with open("post_body_detail.raw", "r") as pb_continue:
-    post_body_detail = pb_continue.read()
+with open("post_body_detail.raw", "r") as pb_detail:
+    post_body_detail = pb_detail.read()
 
 # Global application state
 last_view_state = ""
