@@ -212,7 +212,6 @@ def process_page(url, page_number, discard_data=False):
     last_view_generator = urllib.quote(get_asp_resp_var(req.text, "__VIEWSTATEGENERATOR"))
 
     if discard_data:
-        turbotlib.log("discarding data: %s" % req.text)
         return req.text
 
     table = get_result_table(req.text)
@@ -243,7 +242,7 @@ def process_pages(url):
     record_count = None
     page_number = 1
 
-    while record_count is None or (page_number * 100) < record_count:
+    while record_count is None or (page_number * 100 - 100) < record_count:
         turbotlib.log("Requesting rows %d - %d" % ((page_number * 100 - 100), (page_number * 100)))
 
         # Strage behavior on server: first call returns page 1 results but page must be > 1 to not get null resp
