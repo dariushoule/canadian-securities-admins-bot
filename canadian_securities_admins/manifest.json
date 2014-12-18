@@ -12,7 +12,10 @@
     "name": "jurisdiction"
   },
   "files": [
-    "scraper.py"
+    "scraper.py",
+    "post_body_continue.raw",
+    "post_body_detail.raw",
+    "post_body_seed.raw"
   ],
   "frequency": "monthly",
   "publisher": {
