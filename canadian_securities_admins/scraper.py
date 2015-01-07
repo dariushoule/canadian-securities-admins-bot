@@ -160,14 +160,14 @@ def generate_body_detail(control_id):
 # @return A dictionary containing its locations and associated data
 
 def process_details(url, control_href):
-    return_dict = {"locations": []}
+    return_dict = []
     control_id = urllib.quote(control_href.replace("javascript:__doPostBack('", '').replace("','')", ''))
     req = retrieve(url, "POST", generate_body_detail(control_id))
     resp_markup = get_details_div(req.text)
     locations_entries = resp_markup.select("#ctl00_bodyContent_dlstFirmLocations > tr > td")
 
     for entry in locations_entries:
-        entry_dict = {'location_name': entry.select('.sectiontitle > span')[0].text.strip()}
+        entry_dict = {'jurisdiction': entry.select('.sectiontitle > span')[0].text.strip()}
         locations_table = entry.find('table', recursive=False).find('tbody', recursive=False)
         locations_rows = locations_table.find_all("tr", recursive=False)
 
@@ -187,7 +187,7 @@ def process_details(url, control_href):
                     entry_dict['contact_name'] = row.select('td table td > strong')[0].text.strip()
                     entry_dict['contact']      = "\n".join(row.select('td table td')[0].strings)
 
-        return_dict["locations"].append(entry_dict)
+        return_dict.append(entry_dict)
 
     return return_dict
 
@@ -222,12 +222,13 @@ def process_page(url, page_number, discard_data=False):
             a = tds[0].find('a')
             details = process_details(url, a['href'])
 
-            print json.dumps(dict(details.items() + {
-                'firm': tds[0].text.strip(),
-                'jurisdiction': tds[1].text.strip(),
-                'sample_date': datetime.datetime.now().isoformat(),
-                'source_url': url_start
-            }.items()))
+            for detail in details:
+                print json.dumps(dict({
+                    'firm': tds[0].text.strip(),
+                    'all_jurisdictions': tds[1].text.strip(),
+                    'sample_date': datetime.datetime.now().isoformat(),
+                    'source_url': url_start
+                }.items() + detail.items()))
 
     return req.text
 

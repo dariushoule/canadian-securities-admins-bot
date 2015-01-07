@@ -13,10 +13,16 @@
   },
   "files": [
     "scraper.py",
+    "licence_transformer.py",
     "post_body_continue.raw",
     "post_body_detail.raw",
     "post_body_seed.raw"
   ],
+  "transformers": [{
+    "file":  "licence_transformer.py",
+    "data_type": "simple-licence",
+    "identifying_fields": ["company_name"]
+  }],
   "frequency": "monthly",
   "publisher": {
     "name": "Canadian Securities Administrators",
