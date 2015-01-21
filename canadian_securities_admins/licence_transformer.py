@@ -15,7 +15,9 @@ while True:
         "status": raw_record.get('status', 'Unknown'),
         "jurisdiction_classification": raw_record.get('category', 'Unknown'),
         "category": 'Financial',
-        "confidence": 'HIGH'
+        "confidence": 'HIGH',
+        "start_date": raw_record.get('from', ''),
+        "end_date": raw_record.get('to', '')
     }
 
     print json.dumps(licence_record)
