@@ -21,8 +21,8 @@ with open("post_body_seed.raw", "r") as pb_seed:
 with open("post_body_continue.raw", "r") as pb_continue:
     post_body_continue = pb_continue.read()
 
-with open("post_body_detail.raw", "r") as pb_detail:
-    post_body_detail = pb_detail.read()
+with open("post_body_control.raw", "r") as pb_detail:
+    post_body_control = pb_detail.read()
 
 
 # Global application state
@@ -30,6 +30,7 @@ last_view_state = ""
 last_view_generator = ""
 last_validation = ""
 url_start = "http://www.securities-administrators.ca/nrs/nrsearch.aspx?id=850"
+broken_rows_regex = re.compile(r'<div id="ctl[0-9]+_bodyContent_dlstFirmLocations_ctl[0-9]+_rptCategories_ctl[0-9]+_pnlRevocationDate">(.*?</div>.*?)</div>', re.DOTALL)
 
 
 ##
@@ -65,7 +66,7 @@ def retrieve(url, method, data, attempt=1):
     if (connection_exception or response.status_code != requests.codes.ok) and attempt <= 5:
         turbotlib.log("There was a failure reaching or understanding the host, waiting and retrying...")
 
-        if response.text is not None:
+        if response is not None and response.text is not None:
             turbotlib.log("Failure was: " + response.text)
 
         time.sleep(attempt * 5)
@@ -141,14 +142,15 @@ def generate_body(page_number):
 # generate_body_detail will build the body payload for a detail request
 #
 # @param control_id The id of the control we're sending as the event target
+# @param view_state The current ASP.NET viewstate
 #
 # @return A data string
 
-def generate_body_detail(control_id):
-    return post_body_detail.replace("[CONTROL_ID]", control_id) \
-            .replace("[VIEW_STATE]", last_view_state)           \
-            .replace("[VALIDATION]", last_validation)           \
-            .replace("[GENERATOR]", last_view_generator)
+def generate_body_control(control_id, view_state):
+    return post_body_control.replace("[CONTROL_ID]", control_id) \
+            .replace("[VIEW_STATE]", view_state['view'])         \
+            .replace("[VALIDATION]", view_state['validation'])   \
+            .replace("[GENERATOR]",  view_state['generator'])
 
 
 ##
@@ -161,32 +163,71 @@ def generate_body_detail(control_id):
 
 def process_details(url, control_href):
     return_dict = []
+
     control_id = urllib.quote(control_href.replace("javascript:__doPostBack('", '').replace("','')", ''))
-    req = retrieve(url, "POST", generate_body_detail(control_id))
-    resp_markup = get_details_div(req.text)
+    details_req = retrieve(url, "POST", generate_body_control(control_id, {
+                                                                 'view'      : last_view_state,
+                                                                 'validation': last_validation,
+                                                                 'generator' : last_view_generator}))
+
+    detail_view_state = {'view'      : urllib.quote(get_asp_resp_var(details_req.text, "__VIEWSTATE")),
+                         'validation': urllib.quote(get_asp_resp_var(details_req.text, "__EVENTVALIDATION")),
+                         'generator' : urllib.quote(get_asp_resp_var(details_req.text, "__VIEWSTATEGENERATOR"))}
+
+    if "ctl00_bodyContent_lbtnShowFirmHistorical" in details_req.text:
+        history_req = retrieve(url, "POST", generate_body_control("ctl00%24bodyContent%24lbtnShowFirmHistorical", detail_view_state))
+    else:
+        history_req = None
+        history_entries = []
+
+    resp_markup = get_details_div(details_req.text)
     locations_entries = resp_markup.select("#ctl00_bodyContent_dlstFirmLocations > tr > td")
 
-    for entry in locations_entries:
+    if history_req is not None:
+
+        # Fix super broken tables on history resp
+        history_text = history_req.text
+        for match in broken_rows_regex.finditer(history_text):
+            history_text = history_text.replace(match.group(0), match.group(1))
+
+        history_markup = get_details_div(history_text)
+        history_entries = history_markup.select("#ctl00_bodyContent_dlstFirmLocations > tr > td")
+
+    for entry in (locations_entries + history_entries):
         entry_dict = {'jurisdiction': entry.select('.sectiontitle > span')[0].text.strip()}
         locations_table = entry.find('table', recursive=False).find('tbody', recursive=False)
         locations_rows = locations_table.find_all("tr", recursive=False)
 
+        categories = []
         for row in locations_rows:
             field = row.select('th > span') or row.select('th')
             if len(field) > 0:
                 field = field[0].text.strip()
-                if field == "Category":
-                    entry_dict['category'] = row.find('td').text.strip()
-                elif field == "From":
-                    entry_dict['from']     = row.find('td').text.strip()
-                elif field == "Status":
-                    entry_dict['status']   = row.find('td').text.strip()
-                elif field == "Terms & Conditions":
-                    entry_dict['status']   = row.select('td > span')[0].text.strip()
-                elif field == "Contact Information":
-                    entry_dict['contact_name'] = row.select('td table td > strong')[0].text.strip()
-                    entry_dict['contact']      = "\n".join(row.select('td table td')[0].strings)
 
+                if field == "Category":
+                    categories.append({'category': row.find('td').text.strip()})
+
+                elif field == "From":
+                    categories[-1]['from']   = row.find('td').text.strip()
+
+                elif field == "To":
+                    categories[-1]['to']     = row.find('td').text.strip()
+
+                elif field == "Status":
+                    categories[-1]['status'] = row.find('td').text.strip()
+
+                elif field == "Terms & Conditions":
+                    entry_dict['status']     = row.select('td > span')[0].text.strip()
+
+                elif field == "Contact Information":
+                    entry_dict['contact']    = ""
+                    for contact in row.select('td table td'):
+                        entry_dict['contact'] += "\n" + "\n".join(contact.strings)
+
+        if 'contact' in entry_dict:
+            entry_dict['contact'] = entry_dict['contact'].replace('View Other Addresses', '').strip()
+
+        entry_dict['categories'] = categories
         return_dict.append(entry_dict)
 
     return return_dict
@@ -221,14 +262,23 @@ def process_page(url, page_number, discard_data=False):
         if len(tds) == 2:
             a = tds[0].find('a')
             details = process_details(url, a['href'])
+            primary = {'firm': tds[0].text.strip(),
+                            'all_jurisdictions': tds[1].text.strip(),
+                            'sample_date': datetime.datetime.now().isoformat(),
+                            'source_url': url_start}
 
-            for detail in details:
-                print json.dumps(dict({
-                    'firm': tds[0].text.strip(),
-                    'all_jurisdictions': tds[1].text.strip(),
-                    'sample_date': datetime.datetime.now().isoformat(),
-                    'source_url': url_start
-                }.items() + detail.items()))
+            if len(details) > 0:
+                for detail in details:
+                    categories = detail.pop('categories', [])
+
+                    if len(categories) > 0:
+                        for category in categories:
+                            print json.dumps(dict(primary.items() + detail.items() + category.items()))
+                    else:
+                        print json.dumps(dict(primary.items() + detail.items()))
+
+            else:
+                print json.dumps(primary)
 
     return req.text
 
@@ -264,11 +314,12 @@ def process_pages(url):
 
     turbotlib.log("Run finished!")
 
+# ----------------------------------------------------------------------------------------------------------------------
 
 turbotlib.log("Starting run...")
 turbotlib.log("Getting initial view state...")
-req      = retrieve(url_start, "GET", "")
-document = BeautifulSoup(req.text)
+init_req      = retrieve(url_start, "GET", "")
+document = BeautifulSoup(init_req.text)
 last_view_state     = urllib.quote(document.find(id='__VIEWSTATE')['value'])
 last_validation     = urllib.quote(document.find(id='__EVENTVALIDATION')['value'])
 last_view_generator = urllib.quote(document.find(id='__VIEWSTATEGENERATOR')['value'])
