@@ -15,7 +15,7 @@
     "scraper.py",
     "licence_transformer.py",
     "post_body_continue.raw",
-    "post_body_detail.raw",
+    "post_body_control.raw",
     "post_body_seed.raw"
   ],
   "transformers": [{
