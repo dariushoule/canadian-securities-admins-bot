@@ -1,5 +1,18 @@
 import sys
 import json
+from datetime import datetime
+import turbotlib
+
+
+def date_formatter(date):
+    if len(date) <= 0 or date is None:
+        return ''
+
+    try:
+        return datetime.strptime(date, "%B %d, %Y").isoformat()[:-9]
+    except:
+        turbotlib.log("Failure parsing date: " + date)
+        return ''
 
 while True:
     line = sys.stdin.readline()
@@ -16,8 +29,8 @@ while True:
         "jurisdiction_classification": raw_record.get('category', 'Unknown'),
         "category": 'Financial',
         "confidence": 'HIGH',
-        "start_date": raw_record.get('from', ''),
-        "end_date": raw_record.get('to', '')
+        "start_date": date_formatter(raw_record.get('from', '')),
+        "end_date": date_formatter(raw_record.get('to', ''))
     }
 
     print json.dumps(licence_record)
