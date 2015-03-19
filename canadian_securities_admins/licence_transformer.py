@@ -6,13 +6,19 @@ import turbotlib
 
 def date_formatter(date):
     if len(date) <= 0 or date is None:
-        return ''
+        return None
 
     try:
-        return datetime.strptime(date, "%B %d, %Y").isoformat()[:-9]
+        time = datetime.strptime(date, "%B %d, %Y").isoformat()[:-9]
+        if len(time) <= 1:
+            turbotlib.log("Failure parsing date: " + date)
+            return None
+
+        return time
     except:
         turbotlib.log("Failure parsing date: " + date)
-        return ''
+        return None
+
 
 while True:
     line = sys.stdin.readline()
@@ -20,7 +26,7 @@ while True:
         break
     raw_record = json.loads(line)
 
-    licence_record = {
+    license_record = {
         "company_name": raw_record.get('firm', 'Unknown'),
         "company_jurisdiction": raw_record.get('jurisdiction', 'Unknown'),
         "source_url": raw_record['source_url'],
@@ -33,4 +39,10 @@ while True:
         "end_date": date_formatter(raw_record.get('to', ''))
     }
 
-    print json.dumps(licence_record)
+    if license_record['start_date'] is None:
+        license_record.pop('start_date', None)
+
+    if license_record['end_date'] is None:
+        license_record.pop('end_date', None)
+
+    print json.dumps(license_record)

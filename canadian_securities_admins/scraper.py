@@ -175,7 +175,7 @@ def get_individual(name, jurisdiction, firm):
 
 
 ##
-# Retrieve the company roster (historical inc.) for a firm
+# Retrieve the company roster (historical inclusive) for a firm, stores in cache
 #
 # @param link The link containing the firm's postback
 # @param url The seed url
@@ -264,6 +264,9 @@ def get_and_store_individuals_for_firm(link, url, individuals_view_state, name):
 #
 # @param url The url of the form to process
 # @param control_href The details link href
+# @param view_state The previous view state to work off of
+# @param firm_jurisdiction The jurisdiction of the individual's firm
+# @param firm_name The name of the invdividual's firm
 #
 # @return A dictionary containing its locations and associated data
 def get_registered_individuals(url, control_href, view_state, firm_jurisdiction, firm_name):
@@ -311,7 +314,7 @@ def get_registered_individuals(url, control_href, view_state, firm_jurisdiction,
 
         if processed_individuals < num_individuals:
             if last_processed_individuals == processed_individuals:
-                turbotlib.log('Warning: broke out of infinite loop trying to retrieve all individuals for firm.')
+                turbotlib.log('Warning: broke out of possible infinite loop trying to retrieve all individuals for firm.')
                 break
 
             ind_page += 1
@@ -330,6 +333,7 @@ def get_registered_individuals(url, control_href, view_state, firm_jurisdiction,
 #
 # @param url The url of the form to process
 # @param control_href The details link href
+# @param firm_name The name of the firm
 #
 # @return A dictionary containing its locations and associated data
 
@@ -528,13 +532,15 @@ def process_pages(url):
         record_count = None
 
     if page_number > 1:
+        turbotlib.log("Resuming run from page {0}".format(page_number))
+
         with open('%s/records.dump' % turbotlib.data_dir(), "r") as dump:
             for record in dump:
                 print record
             dump.close()
 
     # iterate over whole or remaining data set
-    while record_count is None or (page_number * 100 - 100) < 100:
+    while record_count is None or (page_number * 100 - 100) < record_count:
         turbotlib.log("Requesting rows %d - %d" % ((page_number * 100 - 100), (page_number * 100)))
 
         # Strange behavior on server: first call returns page 1 results but page must be > 1 to not get null resp
